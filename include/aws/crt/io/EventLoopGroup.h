@@ -13,6 +13,14 @@ namespace Aws
     {
         namespace Io
         {
+            struct AWS_CRT_CPP_API EventLoopGroupShutdownOptions
+            {
+                EventLoopGroupShutdownOptions() : callback(nullptr), userData(nullptr) {}
+
+                std::function<void(void *)> callback;
+                void *userData;
+            };
+
             /**
              * A collection of event loops.
              *
@@ -37,6 +45,11 @@ namespace Aws
                  * each processor on the machine.
                  */
                 EventLoopGroup(uint16_t threadCount = 0, Allocator *allocator = g_allocator) noexcept;
+                EventLoopGroup(
+                    const EventLoopGroupShutdownOptions *shutdownOptions,
+                    uint16_t threadCount = 0,
+                    Allocator *allocator = g_allocator) noexcept;
+
                 ~EventLoopGroup();
                 EventLoopGroup(const EventLoopGroup &) = delete;
                 EventLoopGroup(EventLoopGroup &&) noexcept;
@@ -54,6 +67,25 @@ namespace Aws
                 aws_event_loop_group *GetUnderlyingHandle() noexcept;
 
               private:
+                struct EventLoopGroupShutdownOptionsWrappedData
+                {
+                    EventLoopGroupShutdownOptionsWrappedData() : fn(nullptr), args(nullptr), allocator(nullptr) {}
+
+                    std::function<void(void *)> fn;
+                    void *args;
+                    Allocator *allocator;
+                };
+
+                static void EventLoopGroupShutdownCallback(void *user_data)
+                {
+                    auto userData = static_cast<EventLoopGroupShutdownOptionsWrappedData *>(user_data);
+                    if (userData->fn)
+                    {
+                        userData->fn(userData->args);
+                    }
+                    Crt::Delete(userData, userData->allocator);
+                }
+
                 aws_event_loop_group *m_eventLoopGroup;
                 int m_lastError;
             };

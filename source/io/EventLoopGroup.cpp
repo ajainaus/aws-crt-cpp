@@ -11,9 +11,33 @@ namespace Aws
         namespace Io
         {
             EventLoopGroup::EventLoopGroup(uint16_t threadCount, Allocator *allocator) noexcept
+                : EventLoopGroup(nullptr, threadCount, allocator)
+            {
+            }
+
+            EventLoopGroup::EventLoopGroup(
+                const EventLoopGroupShutdownOptions *shutdownOptions,
+                uint16_t threadCount,
+                Allocator *allocator) noexcept
                 : m_eventLoopGroup(nullptr), m_lastError(AWS_ERROR_SUCCESS)
             {
-                m_eventLoopGroup = aws_event_loop_group_new_default(allocator, threadCount, NULL);
+                if (shutdownOptions)
+                {
+                    auto wrappedData = Crt::New<EventLoopGroupShutdownOptionsWrappedData>(allocator);
+                    wrappedData->fn = shutdownOptions->callback;
+                    wrappedData->args = shutdownOptions->userData;
+                    wrappedData->allocator = allocator;
+
+                    aws_shutdown_callback_options options;
+                    options.shutdown_callback_fn = EventLoopGroup::EventLoopGroupShutdownCallback;
+                    options.shutdown_callback_user_data = static_cast<void *>(wrappedData);
+                    m_eventLoopGroup = aws_event_loop_group_new_default(allocator, threadCount, &options);
+                }
+                else
+                {
+                    m_eventLoopGroup = aws_event_loop_group_new_default(allocator, threadCount, NULL);
+                }
+
                 if (m_eventLoopGroup == nullptr)
                 {
                     m_lastError = aws_last_error();
